@@ -1,0 +1,78 @@
+import re
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from PyPDF2 import PdfReader
+
+path = "/content/4522-Article Text-17301-2-10-20230111.pdf"
+text = "\n".join([p.extract_text() for p in reader.pages])
+text = re.sub(r'\r', '', text)
+text = re.sub(r'\n{3,}', '\n\n', text)
+
+#Pivot
+vowels = set("aeiouAEIOU")
+def count_vowels_consonants(w):
+    letters = [ch for ch in w if ch.isalpha()]
+    v = sum(ch in vowels for ch in letters)
+    c = sum(ch.isalpha() and ch not in vowels for ch in letters)
+    return v, c
+words = re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?", text)
+rows = []
+for w in words:
+    v, c = count_vowels_consonants(w)
+    rows.append({"word": w.lower(), "vowels": v, "consonants": c})
+df = pd.DataFrame(rows)
+df["freq"] = df.groupby("word")["word"].transform("count")
+#Pivot Frekuensi Kata
+pivot_freq = (df.groupby(["consonants","vowels"])["freq"]
+                .sum().reset_index()
+                .pivot(index="vowels", columns="consonants", values="freq")
+                .fillna(0).astype(int))
+display(pivot_freq)
+#Pivot Jumlah Kata Unik
+pivot_unique = (df.drop_duplicates("word")
+                  .groupby(["consonants","vowels"])
+                  .size().reset_index(name="unique_word_count")
+                  .pivot(index="vowels", columns="consonants", values="unique_word_count")
+                  .fillna(0).astype(int))
+display(pivot_unique)
+
+#Jumlah Kalimat Per-Paragraf
+paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
+sentences_per_paragraph = []
+for p in paragraphs:
+    s = re.split(r'(?<=[.!?])\s+(?=[A-Z0-9])', p)
+    s = [x.strip() for x in s if x.strip()]
+    sentences_per_paragraph.append(len(s))
+#Histogram
+plt.figure(figsize=(8,4))
+plt.hist(sentences_per_paragraph, bins=10, edgecolor='black')
+plt.title("Histogram Jumlah Kalimat per Paragraf")
+plt.xlabel("Jumlah kalimat"); plt.ylabel("Frekuensi"); plt.grid(alpha=0.3)
+plt.show()
+print(pd.Series(sentences_per_paragraph).describe())
+
+#Jumlah Kata Per-Kalimat
+sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z0-9])', text)
+sentences = [s.strip() for s in sentences if s.strip()]
+words_per_sentence = [len(re.findall(r"[A-Za-z]+", s)) for s in sentences]
+#Histogram
+plt.figure(figsize=(8,4))
+plt.hist(words_per_sentence, bins=20, edgecolor='black')
+plt.title("Histogram Jumlah Kata per Kalimat")
+plt.xlabel("Jumlah kata"); plt.ylabel("Frekuensi"); plt.grid(alpha=0.3)
+plt.show()
+print(pd.Series(words_per_sentence).describe())
+
+#Heatmap Frekuensi Kata
+plt.figure(figsize=(8,6))
+sns.heatmap(pivot_freq, cmap="viridis")
+plt.title("Heatmap Frekuensi Kata (Vokal × Konsonan)")
+plt.xlabel("Konsonan"); plt.ylabel("Vokal")
+plt.show()
+#Heatmap Jumlah Kata Unik
+plt.figure(figsize=(8,6))
+sns.heatmap(pivot_unique, cmap="magma")
+plt.title("Heatmap Jumlah Kata Unik (Vokal × Konsonan)")
+plt.xlabel("Konsonan"); plt.ylabel("Vokal")
+plt.show()
